@@ -1,4 +1,5 @@
 # -*- encoding: utf-8 -*-
+
 #
 # Author:: Alain Dejoux (<adejoux@djouxtech.net>)
 #
@@ -21,15 +22,12 @@ require 'kitchen/driver/wpar_version'
 require 'net/ssh'
 
 module Kitchen
-
   module Driver
-
     # Wpar driver for Kitchen.
     #
     # @author Alain Dejoux <adejoux@djouxtech.net>
     # noinspection RubyDefParenthesesInspection,SpellCheckingInspection
     class Wpar < Kitchen::Driver::Base
-
       kitchen_driver_api_version 2
       plugin_version Kitchen::Driver::WPAR_VERSION
 
@@ -54,86 +52,64 @@ module Kitchen
       default_config :pam_sshd_session_rule, 'sshd session required pam_aix'
 
       def create(state)
-        if wpar_exists?(state)
-          raise ActionFailed, 'wpar already exists !'
-        end
+        raise ActionFailed, 'wpar already exists !' if wpar_exists?(state)
 
-        cmd = build_mkwpar_command()
+        cmd = build_mkwpar_command
         ssh_command(cmd, :stderr)
 
-        unless wpar_exists?(state)
-          raise ActionFailed, 'Cannot create wpar !'
-        end
-        state[:hostname]= config[:wpar_address] || config[:wpar_name]
-        copy_key()
+        raise ActionFailed, 'Cannot create wpar !' unless wpar_exists?(state)
+        state[:hostname] = config[:wpar_address] || config[:wpar_name]
+        copy_key
 
         # Ensure sshd is a defined service and is running so that
         # kitchen can connect to the host and do work.
-        unless sshd_service_exists?
-          create_sshd_service
-        end
+        create_sshd_service unless sshd_service_exists?
 
-        unless sshd_service_running?
-          start_sshd_service
-        end
+        start_sshd_service unless sshd_service_running?
 
-        unless pam_supports_sshd?
-          configure_pam
-        end
+        configure_pam unless pam_supports_sshd?
       end
 
       protected
-      def build_mkwpar_command()
 
+      def build_mkwpar_command
         cmd = "#{config[:mkwpar]} -s -n #{config[:wpar_name]}"
         unless config[:wpar_address].nil?
           cmd += " -N address=#{config[:wpar_address]}"
         end
 
-        if config[:share_network_resolution]
-          cmd += " -r"
-        end
+        cmd += ' -r' if config[:share_network_resolution]
 
-        unless config[:wpar_vg].nil?
-          cmd += " -g #{config[:wpar_vg]}"
-        end
+        cmd += " -g #{config[:wpar_vg]}" unless config[:wpar_vg].nil?
 
         unless config[:wpar_rootvg].nil?
           cmd += " -D rootvg=yes devname=#{config[:wpar_rootvg]}"
         end
 
         unless config[:wpar_mksysb].nil?
-          if config[:isVersioned]
-            cmd += " -C"
-          end
+          cmd += ' -C' if config[:isVersioned]
           cmd += " -B #{config[:wpar_mksysb]}"
         end
 
-        if config[:wpar_copy_rootvg]
-          cmd += ' -t'
-        end
+        cmd += ' -t' if config[:wpar_copy_rootvg]
 
-        if config[:isWritable]
-          cmd += ' -l'
-        end
-
+        cmd += ' -l' if config[:isWritable]
 
         cmd
       end
 
-      def copy_key()
+      def copy_key
         cmd = "mkdir /wpars/#{config[:wpar_name]}/.ssh;"
         cmd += "chmod 700 /wpars/#{config[:wpar_name]}/.ssh"
         ssh_command(cmd, :stderr)
-        cmd="cp ~/.ssh/authorized_keys /wpars/#{config[:wpar_name]}/.ssh"
+        cmd = "cp ~/.ssh/authorized_keys /wpars/#{config[:wpar_name]}/.ssh"
         ssh_command(cmd, :stderr)
       end
 
-      def wpar_exists?(state)
-        output=ssh_command("#{config[:lswpar]} #{config[:wpar_name]}", :stderr)
-        if output.include?('0960-419')
-          return false
-        end
+      def wpar_exists?(_state)
+        output = ssh_command("#{config[:lswpar]} #{config[:wpar_name]}",
+                             :stderr)
+        return false if output.include?('0960-419')
         true
       end
 
@@ -141,14 +117,12 @@ module Kitchen
       def sshd_service_exists?
         # FIXME: We should probably check exit status rather than AIX-specific
         # error codes.
-        output=ssh_command("#{config[:clogin]} "\
+        output = ssh_command("#{config[:clogin]} "\
                            "#{config[:wpar_name]} "\
                            "#{config[:lssrc]} -s sshd",
-                           :stderr)
+                             :stderr)
         # 0513-085 The sshd Subsystem is not on file.
-        if output.include?('0513-085')
-          return false
-        end
+        return false if output.include?('0513-085')
         true
       end
 
@@ -156,16 +130,14 @@ module Kitchen
       def create_sshd_service
         # FIXME: We should probably check exit status rather than AIX-specific
         # error codes.
-        output=ssh_command("#{config[:clogin]} "\
+        output = ssh_command("#{config[:clogin]} "\
                            "#{config[:wpar_name]} "\
                            "#{config[:mkssys]} "\
-                           "-s sshd -p /usr/sbin/sshd "\
+                           '-s sshd -p /usr/sbin/sshd '\
                            "-a '-D' -u 0 -S -n 15 -f 9 -R -G local",
-                           :stderr)
+                             :stderr)
         # 0513-071 The sshd Subsystem has been added.
-        if output.include?('0513-071')
-          return true
-        end
+        return true if output.include?('0513-071')
         false
       end
 
@@ -173,28 +145,24 @@ module Kitchen
       def sshd_service_running?
         # FIXME: We should probably check exit status rather than AIX-specific
         # error codes.
-        output=ssh_command("#{config[:clogin]} "\
+        output = ssh_command("#{config[:clogin]} "\
                            "#{config[:wpar_name]} "\
                            "#{config[:lssrc]} -s sshd",
-                           :stderr)
-        if output.include?('active')
-          return true
-        end
+                             :stderr)
+        return true if output.include?('active')
         false # Status == inoperative
       end
 
-       # Starts the sshd service.
+      # Starts the sshd service.
       def start_sshd_service
         # FIXME: We should probably check exit status rather than AIX-specific
         # error codes.
-        output=ssh_command("#{config[:clogin]} "\
+        output = ssh_command("#{config[:clogin]} "\
                            "#{config[:wpar_name]} "\
                            "#{config[:startsrc]} -s sshd",
-                           :stderr)
+                             :stderr)
         # 0513-059 The sshd Subsystem has been started. Subsystem PID is 123...
-        if output.include?('0513-059')
-          return true
-        end
+        return true if output.include?('0513-059')
         false
       end
 
@@ -202,17 +170,17 @@ module Kitchen
       # This includes account and session rules.
       def pam_supports_sshd?
         pam_config_path = "/wpars/#{config[:wpar_name]}/etc/pam.conf"
-        account_output=ssh_command("grep "\
+        account_output = ssh_command('grep '\
                                    "'#{config[:pam_sshd_account_rule]}' "\
                                    "#{pam_config_path}", :stderr)
-        session_output=ssh_command("grep "\
+        session_output = ssh_command('grep '\
                                    "'#{config[:pam_sshd_session_rule]}' "\
                                    "#{pam_config_path}", :stderr)
 
-        unless account_output.include?("#{config[:pam_sshd_account_rule]}")
+        unless account_output.include?(config[:pam_sshd_account_rule].to_s)
           return false
         end
-        unless session_output.include?("#{config[:pam_sshd_session_rule]}")
+        unless session_output.include?(config[:pam_sshd_session_rule].to_s)
           return false
         end
 
@@ -224,20 +192,20 @@ module Kitchen
         pam_config_path = "/wpars/#{config[:wpar_name]}/etc/pam.conf"
         pam_sshd_rules = "#{config[:pam_sshd_account_rule]}"\
                          "\\n#{config[:pam_sshd_session_rule]}"
-        header = "\\n\\n# sshd Rules\\n"
+        header = '\\n\\n# sshd Rules\\n'
         cmd = "#{config[:echo]} \"#{header}#{pam_sshd_rules}\" "\
               ">> #{pam_config_path}"
         ssh_command(cmd, :stderr)
       end
 
-      def ssh_command(cmd, stream)
+      def ssh_command(cmd, _stream)
         out = ''
         begin
           host = config[:aix_host]
           user = config[:aix_user]
           keys = config[:aix_key]
-          Net::SSH.start(host, user, :keys => keys) do |ssh|
-            ssh.exec!(cmd) do |channel, stream, data|
+          Net::SSH.start(host, user, keys: keys) do |ssh|
+            ssh.exec!(cmd) do |_channel, stream, data|
               out << data if stream == stream
               print data
             end
@@ -247,7 +215,6 @@ module Kitchen
           raise ActionFailed, 'ssh command failed !'
         end
       end
-
     end
   end
 end

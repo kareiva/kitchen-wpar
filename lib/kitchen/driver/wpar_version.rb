@@ -1,4 +1,5 @@
 # -*- encoding: utf-8 -*-
+
 #
 # Author:: Alain Dejoux (<adejoux@djouxtech.net>)
 
@@ -17,10 +18,8 @@
 # limitations under the License.
 
 module Kitchen
-
   module Driver
-
     # Version string for Wpar Kitchen driver
-    WPAR_VERSION = "0.4.1"
+    WPAR_VERSION = '0.4.1'.freeze
   end
 end
